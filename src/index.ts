@@ -1,35 +1,93 @@
-import { Hono } from 'hono';
+import { Hono, Context } from 'hono';
 import { bearerAuth } from 'hono/bearer-auth';
+
+/**
+ * Create a new Hono app
+ */
 const app = new Hono();
 
-app.get('/api', (ctx) => ctx.text('Welcome to the API'));
+/**
+ * Cloudflare Images API endpoint
+ */
+const CF_IMAGES_API = 'https://api.cloudflare.com/client/v4/accounts/{account_identifier}/images/v1';
 
-app // Bearer auth for KV
+/**
+ * Represents a Cloudflare Image
+ */
+interface Image {
+	id: string;
+	filename: string;
+	uploaded: string;
+	requireSignedURLs: boolean;
+	variants: string[];
+}
+
+/**
+ * Represents the result of the Cloudflare Images API
+ */
+interface ImageApiResult {
+	result: {
+		images: Image[];
+	}
+}
+
+/**
+ * KV error handler
+ */
+const kvErr = (err: any, ctx: Context) => (ctx.status(400), ctx.json({ error: err.message }));
+
+/**
+ * Get KV value
+ */
+const getKv = (ctx: Context) =>
+	(ctx.env.eye as KVNamespace).get(ctx.req.param().key)
+		.then((value) => ctx.text(value))
+		.catch((err) => kvErr(err, ctx));
+
+/**
+ * Set KV value
+ */
+const setKv = (ctx: Context) =>
+	(ctx.env.eye as KVNamespace).put(ctx.req.param().key, ctx.req.param().value)
+		.then(() => ctx.status(200))
+		.catch((err) => kvErr(err, ctx));
+
+// KV routes
+app
+	// Bearer auth for KV
 	.use('/api/kv/*', (ctx, next) => bearerAuth({ token: ctx.env.TOKEN })(ctx, next))
 
-	// Get KV value
-	.get('/api/kv/:key', (ctx) =>
-		(ctx.env.eye as KVNamespace).get(ctx.req.param().key)
-			.then((value) => ctx.json({ value }))
-			.catch((err) => (ctx.status(400), ctx.json({ error: err.message }))))
+	// Get/Set KV value
+	.get('/api/kv/:key', getKv)
+	.post('/api/kv/:key/:value', setKv);
 
-	// Set KV value
-	.post('/api/kv/:key/:value', (ctx) =>
-		(ctx.env.eye as KVNamespace).put(ctx.req.param().key, ctx.req.param().value)
-			.then(() => ctx.json({ success: true }))
-			.catch((err) => (ctx.status(400), ctx.json({ error: err.message }))));
-
-// List Cloudflare Images
-const CF_IMAGES = 'https://api.cloudflare.com/client/v4/accounts/{account_identifier}/images/v1';
-app.get('/api/images',
-	(ctx, next) => bearerAuth({ token: ctx.env.TOKEN })(ctx, next),
-	(ctx) => fetch(CF_IMAGES.replace('{account_identifier}', ctx.env.ACCOUNT_ID), { headers: { 'Authorization': `Bearer ${ctx.env.API_KEY}` } }));
-
+// Image relay
 app.get('/:image/:variant?', (ctx) => {
-	const { image, variant } = ctx.req.param();
-	const accountHash = ctx.env.ACCOUNT_HASH;
-	const url = `https://imagedelivery.net/${accountHash}/${image}/${variant || 'public'}`;
-	return fetch(url);
+	let { image: imageName, variant: variantName } = ctx.req.param();
+
+	return fetch(CF_IMAGES_API.replace('{account_identifier}', ctx.env.ACCOUNT_ID), { headers: { 'Authorization': `Bearer ${ctx.env.API_KEY}` } })
+		.then((res) => res.json())
+
+		// Find image
+		.then((json: ImageApiResult) => {
+			const image: Image = json.result.images.find((img) => img.filename === imageName);
+			if (!image) throw new Error('Image not found');
+			return image;
+		})
+
+		// Find variant
+		.then((image) => {
+
+			// Default to public variant
+			if (!variantName) variantName = 'public';
+
+			const variantUrl = image.variants.find((v) => v.endsWith(variantName));
+			if (!variantUrl) throw new Error('Variant not found');
+			return variantUrl;
+		})
+
+		// Fetch variant
+		.then(fetch);
 });
 
 app.get('/*', (ctx) => (ctx.env.ASSETS as Fetcher).fetch(ctx.req));
