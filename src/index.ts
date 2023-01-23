@@ -19,6 +19,13 @@ app // Bearer auth for KV
 			.then(() => ctx.json({ success: true }))
 			.catch((err) => (ctx.status(400), ctx.json({ error: err.message }))));
 
+app.get('/:image/:variant?', (ctx) => {
+	const { image, variant } = ctx.req.param();
+	const accountHash = ctx.env.ACCOUNT_HASH;
+	const url = `https://imagedelivery.net/${accountHash}/${image}/${variant || 'public'}`;
+	return fetch(url);
+});
+
 app.get('/*', (ctx) => (ctx.env.ASSETS as Fetcher).fetch(ctx.req));
 
 export default app;
