@@ -19,6 +19,12 @@ app // Bearer auth for KV
 			.then(() => ctx.json({ success: true }))
 			.catch((err) => (ctx.status(400), ctx.json({ error: err.message }))));
 
+// List Cloudflare Images
+const CF_IMAGES = 'https://api.cloudflare.com/client/v4/accounts/{account_identifier}/images/v1';
+app.get('/api/images',
+	(ctx, next) => bearerAuth({ token: ctx.env.TOKEN })(ctx, next),
+	(ctx) => fetch(CF_IMAGES.replace('{account_identifier}', ctx.env.ACCOUNT_ID), { headers: { 'Authorization': `Bearer ${ctx.env.API_KEY}` } }));
+
 app.get('/:image/:variant?', (ctx) => {
 	const { image, variant } = ctx.req.param();
 	const accountHash = ctx.env.ACCOUNT_HASH;
