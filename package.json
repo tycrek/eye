@@ -6,7 +6,7 @@
 		"wrangler": "node ./node_modules/wrangler/bin/wrangler.js",
 		"build": "esbuild --bundle src/index.ts --format=esm --outfile=dist/_worker.js",
 		"pagery": "node ./node_modules/pagery/dist/pagery.js --output=dist/",
-		"dev": "npm run build && npm run pagery && npm run wrangler pages dev dist/",
+		"dev": "npm run build && npm run pagery && node ./node_modules/wrangler/bin/wrangler.js pages dev dist/ --kv eye",
 		"publish": "npm run build && node ./node_modules/wrangler/bin/wrangler.js pages publish dist/ --project-name=eye"
 	},
 	"devDependencies": {
