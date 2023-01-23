@@ -50,6 +50,11 @@ app
 	.get('/api/kv/:key', (ctx) => KV(ctx).get(ctx.req.param().key).then((value) => ctx.text(value)).catch((err) => kvErr(err, ctx)))
 	.post('/api/kv/:key/:value', (ctx) => KV(ctx).put(ctx.req.param().key, ctx.req.param().value).catch((err) => kvErr(err, ctx)));
 
+// Expire cache manually
+app.get('/expire-cache', (ctx) =>
+	Promise.all([KV(ctx).delete('KV_LAST_CACHED'), KV(ctx).delete('KV_IMAGES'), 'Cache expired'])
+		.then(([, , msg]) => (console.log(msg), ctx.text(msg))));
+
 // Image relay
 app.get('/:image/:variant?', async (ctx) => {
 	let { image: imageName, variant: variantName } = ctx.req.param();
