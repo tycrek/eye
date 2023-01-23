@@ -37,20 +37,9 @@ interface ImageApiResult {
 const kvErr = (err: any, ctx: Context) => (ctx.status(400), ctx.json({ error: err.message }));
 
 /**
- * Get KV value
+ * KV namespace
  */
-const getKv = (ctx: Context) =>
-	(ctx.env.eye as KVNamespace).get(ctx.req.param().key)
-		.then((value) => ctx.text(value))
-		.catch((err) => kvErr(err, ctx));
-
-/**
- * Set KV value
- */
-const setKv = (ctx: Context) =>
-	(ctx.env.eye as KVNamespace).put(ctx.req.param().key, ctx.req.param().value)
-		.then(() => ctx.status(200))
-		.catch((err) => kvErr(err, ctx));
+const KV = (ctx: Context) => (ctx.env.eye as KVNamespace);
 
 // KV routes
 app
@@ -58,8 +47,8 @@ app
 	.use('/api/kv/*', (ctx, next) => bearerAuth({ token: ctx.env.TOKEN })(ctx, next))
 
 	// Get/Set KV value
-	.get('/api/kv/:key', getKv)
-	.post('/api/kv/:key/:value', setKv);
+	.get('/api/kv/:key', (ctx) => KV(ctx).get(ctx.req.param().key).then((value) => ctx.text(value)).catch((err) => kvErr(err, ctx)))
+	.post('/api/kv/:key/:value', (ctx) => KV(ctx).put(ctx.req.param().key, ctx.req.param().value).catch((err) => kvErr(err, ctx)));
 
 // Image relay
 app.get('/:image/:variant?', (ctx) => {
