@@ -1,0 +1,12 @@
+{
+	"name": "eye",
+	"author": "tycrek <t@tycrek.com> (https://tycrek.com)",
+	"scripts": {
+		"wrangler": "node ./node_modules/wrangler/bin/wrangler.js",
+		"dev": "npm run wrangler pages dev html/",
+		"publish": "node ./node_modules/wrangler/bin/wrangler.js pages publish html/ --project-name=eye"
+	},
+	"dependencies": {
+		"wrangler": "^2.8.0"
+	}
+}
