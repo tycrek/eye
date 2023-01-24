@@ -41,6 +41,32 @@ const kvErr = (err: any, ctx: Context) => (ctx.status(400), ctx.json({ error: er
  */
 const KV = (ctx: Context) => (ctx.env.eye as KVNamespace);
 
+/**
+ * Check if kache is expired
+ */
+const isExpred = (ctx: Context) => new Promise((resolve, reject) =>
+	KV(ctx).get('KV_LAST_CACHED')
+		.then((lastCached) => {
+			const expired1hour: boolean = !lastCached || new Date(lastCached).getTime() < new Date().getTime() - 1000 * 60 * 60;
+			const expired30Seconds: boolean = !lastCached || new Date(lastCached).getTime() < new Date().getTime() - 1000 * 30;
+
+			const dev = false;
+			resolve(dev ? expired30Seconds : expired1hour);
+		}));
+
+/**
+ * Fetch images from Cloudflare API
+ */
+const fetchImages = (ctx: Context) =>
+	fetch(CF_IMAGES_API.replace('{account_identifier}', ctx.env.ACCOUNT_ID), { headers: { 'Authorization': `Bearer ${ctx.env.API_KEY}` } })
+		.then((res) => res.json())
+		.then((json: ImageApiResult) => Promise.all([
+			KV(ctx).put('KV_IMAGES', JSON.stringify(json.result.images)),
+			KV(ctx).put('KV_LAST_CACHED', new Date().toISOString()),
+			json.result.images
+		]))
+		.then(([, , images]) => images);
+
 // KV routes
 app
 	// Bearer auth for KV
@@ -55,53 +81,41 @@ app.get('/expire-cache', (ctx) =>
 	Promise.all([KV(ctx).delete('KV_LAST_CACHED'), KV(ctx).delete('KV_IMAGES'), 'Cache expired'])
 		.then(([, , msg]) => (console.log(msg), ctx.text(msg))));
 
+// Lookup name -> id and vice versa
+app.get('/lookup/:needle', (ctx) => {
+	const { needle } = ctx.req.param();
+
+	return isExpred(ctx)
+		.then(async (expired) => (!expired) ? JSON.parse(await KV(ctx).get('KV_IMAGES')) : fetchImages(ctx))
+		.then((images) => {
+			const image: Image = images.find((img) => img.filename === needle || img.id === needle);
+			if (!image) throw new Error(`Image not found: ${needle}`);
+
+			return ctx.json(image);
+		});
+});
+
 // Image relay
-app.get('/:image/:variant?', async (ctx) => {
+app.get('/:image/:variant?', (ctx) => {
 	let { image: imageName, variant: variantName } = ctx.req.param();
 
-	// Check if KV_LAST_CACHED is set and if so, check if it's older than 1 hour
-	const lastCached = await KV(ctx).get('KV_LAST_CACHED');
-	const expired1hour: boolean = !lastCached || new Date(lastCached).getTime() < new Date().getTime() - 1000 * 60 * 60;
-	const expired30Seconds: boolean = !lastCached || new Date(lastCached).getTime() < new Date().getTime() - 1000 * 30;
+	return isExpred(ctx)
+		.then(async (expired) => (!expired) ? JSON.parse(await KV(ctx).get('KV_IMAGES')) : fetchImages(ctx))
+		.then((images) => {
+			// Find image
+			const image: Image = images.find((img) => img.filename === imageName);
+			if (!image) throw new Error(`Image not found: ${imageName}`);
 
-	// dev switch
-	const expired = expired1hour;
+			// Default to public variant
+			if (!variantName) variantName = 'public';
 
-	// Images array
-	let images: Image[] = [];
+			// Find variant
+			const variantUrl = image.variants.find((v) => v.endsWith(variantName));
+			if (!variantUrl) throw new Error(`Variant not found: ${variantName}`);
 
-	// Log
-	console.log(`KV_LAST_CACHED: ${lastCached} (expired: ${expired})`);
-	console.log(`We are ${expired ? 'fetching' : 'using cached'} images...`);
-
-	const fetchImages = async () => {
-		// Fetch images from Cloudflare API
-		const json: ImageApiResult = await (await fetch(CF_IMAGES_API.replace('{account_identifier}', ctx.env.ACCOUNT_ID), { headers: { 'Authorization': `Bearer ${ctx.env.API_KEY}` } })).json();
-
-		// Cache images in KV
-		KV(ctx).put('KV_IMAGES', JSON.stringify(json.result.images));
-		KV(ctx).put('KV_LAST_CACHED', new Date().toISOString());
-
-		images = json.result.images;
-	}
-
-	// If KV_LAST_CACHED is set and not expired, fetch images from KV
-	if (!expired) images = JSON.parse(await KV(ctx).get('KV_IMAGES'));
-	else await fetchImages();
-
-	// Find image
-	const image: Image = images.find((img) => img.filename === imageName);
-	if (!image) throw new Error(`Image not found: ${imageName}`);
-
-	// Default to public variant
-	if (!variantName) variantName = 'public';
-
-	// Find variant
-	const variantUrl = image.variants.find((v) => v.endsWith(variantName));
-	if (!variantUrl) throw new Error(`Variant not found: ${variantName}`);
-
-	// Fetch variant
-	return fetch(variantUrl);
+			// Fetch variant
+			return fetch(variantUrl);
+		})
 });
 
 app.get('/*', (ctx) => (ctx.env.ASSETS as Fetcher).fetch(ctx.req));
