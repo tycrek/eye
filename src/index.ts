@@ -57,15 +57,18 @@ const isExpred = (ctx: Context) => new Promise((resolve, reject) =>
 /**
  * Fetch images from Cloudflare API
  */
-const fetchImages = (ctx: Context) =>
+const fetchImages = (ctx: Context) => new Promise((resolve, reject) =>
 	fetch(CF_IMAGES_API.replace('{account_identifier}', ctx.env.ACCOUNT_ID), { headers: { 'Authorization': `Bearer ${ctx.env.API_KEY}` } })
 		.then((res) => res.json())
-		.then((json: ImageApiResult) => Promise.all([
-			KV(ctx).put('KV_IMAGES', JSON.stringify(json.result.images)),
-			KV(ctx).put('KV_LAST_CACHED', new Date().toISOString()),
-			json.result.images
-		]))
-		.then(([, , images]) => images);
+		.then((json: ImageApiResult) => {
+			resolve(json.result.images);
+			return Promise.all([
+				KV(ctx).put('KV_IMAGES', JSON.stringify(json.result.images)),
+				KV(ctx).put('KV_LAST_CACHED', new Date().toISOString()),
+			]);
+		})
+		.then(([,]) => console.log('KV cache updated'))
+		.catch((err) => reject(err)));
 
 // KV routes
 app
