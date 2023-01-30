@@ -117,8 +117,14 @@ app.get('/:image/:variant?', (ctx) => {
 			if (!variantUrl) throw new Error(`Variant not found: ${variantName}`);
 
 			// Fetch variant
-			return fetch(variantUrl);
-		})
+			return fetch(variantUrl)
+				// Modify headers to attach original filename
+				.then((res) => {
+					const nres = res.clone();
+					nres.headers.set('Content-Disposition', `inline; filename="${image.filename}"`);
+					return nres;
+				});
+		});
 });
 
 app.get('/*', (ctx) => (ctx.env.ASSETS as Fetcher).fetch(ctx.req));
