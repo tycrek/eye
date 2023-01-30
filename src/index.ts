@@ -106,7 +106,7 @@ app.get('/:image/:variant?', (ctx) => {
 		.then(async (expired) => (!expired) ? JSON.parse(await KV(ctx).get('KV_IMAGES')) : fetchImages(ctx))
 		.then((images) => {
 			// Find image
-			const image: Image = images.find((img) => img.filename === imageName);
+			const image: Image = images.find((img) => img.filename === imageName || img.id === imageName || img.filename.split('.')[0] === imageName.split('.')[0]);
 			if (!image) throw new Error(`Image not found: ${imageName}`);
 
 			// Default to public variant
