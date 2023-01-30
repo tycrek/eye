@@ -124,6 +124,10 @@ app.get('/:image/:variant?', (ctx) => {
 					nres.headers.set('Content-Disposition', `inline; filename="${image.filename}"`);
 					return nres;
 				});
+		})
+		.catch((err) => {
+			ctx.status(500);
+			return ctx.text(err.message);
 		});
 });
 
