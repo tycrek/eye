@@ -38,6 +38,11 @@ interface ImageApiResult {
 const bytesToMiB = (bytes: number) => (bytes / 1024 / 1024).toFixed(2);
 
 /**
+ * Strip file extension from filename
+ */
+const stripExtension = (filename: string) => filename.split('.').slice(0, -1).join('.');
+
+/**
  * KV error handler
  */
 const kvErr = (err: any, ctx: Context) => (ctx.status(400), ctx.json({ error: err.message }));
@@ -113,7 +118,7 @@ app.get('/:image/:variant?', (ctx) => {
 		.then(async (expired) => (!expired) ? JSON.parse(await KV(ctx).get('KV_IMAGES')) : fetchImages(ctx))
 		.then((images) => {
 			// Find image
-			const image: Image = images.find((img) => img.filename === imageName || img.id === imageName || img.filename.split('.')[0] === imageName.split('.')[0]);
+			const image: Image = images.find((img) => img.filename === imageName || img.id === imageName || stripExtension(img.filename) === stripExtension(imageName));
 			if (!image) throw new Error(`Image not found: ${imageName}`);
 
 			// Default to public variant
