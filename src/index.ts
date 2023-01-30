@@ -120,8 +120,9 @@ app.get('/:image/:variant?', (ctx) => {
 			return fetch(variantUrl)
 				// Modify headers to attach original filename
 				.then((res) => {
-					const nres = res.clone();
-					nres.headers.set('Content-Disposition', `inline; filename="${image.filename}"`);
+					// Clone the response so that it's no longer immutable
+					const nres = new Response(res.body, res);
+					nres.headers.append('Content-Disposition', `inline; filename="${image.filename}"`);
 					return nres;
 				});
 		})
