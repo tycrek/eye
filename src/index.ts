@@ -52,7 +52,8 @@ const isExpred = (ctx: Context) => new Promise((resolve, reject) =>
 
 			const dev = false;
 			resolve(dev ? expired30Seconds : expired1hour);
-		}));
+		})
+		.catch((err) => reject(err)));
 
 /**
  * Fetch images from Cloudflare API
