@@ -32,6 +32,12 @@ interface ImageApiResult {
 }
 
 /**
+ * Bytes to MiB (mebibytes) converter
+ * Cloudflare Workers KV values are limited to 25 MiB
+ */
+const bytesToMiB = (bytes: number) => (bytes / 1024 / 1024).toFixed(2);
+
+/**
  * KV error handler
  */
 const kvErr = (err: any, ctx: Context) => (ctx.status(400), ctx.json({ error: err.message }));
