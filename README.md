@@ -49,6 +49,8 @@ Returns the JSON info of the filename or ID provided.
 
 Returns the image for the given image name and variant. If no variant is provided, the default `public` variant is used.
 
+The `image` parameter can be either the filename or UUID of the image. File extensions are optional.
+
 ## Stack
 
 - [Cloudflare Workers](https://developers.cloudflare.com/workers/) - serverless hosting
