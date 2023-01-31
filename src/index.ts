@@ -88,9 +88,11 @@ const isExpired = (ctx: Context) => new Promise((resolve, reject) =>
 			// Expirations: 1 hour; 30 seconds (for dev)
 			const expired1hour: boolean = !lastCached || new Date(lastCached).getTime() < new Date().getTime() - 1000 * 60 * 60;
 			const expired30Seconds: boolean = !lastCached || new Date(lastCached).getTime() < new Date().getTime() - 1000 * 30;
+			const expired24hours: boolean = !lastCached || new Date(lastCached).getTime() < new Date().getTime() - 1000 * 60 * 60 * 24;
 
 			const dev = false;
-			resolve(dev ? expired30Seconds : expired1hour);
+			const longTerm = true;
+			resolve(dev ? expired30Seconds : longTerm ? expired24hours : expired1hour);
 		})
 		.catch(reject));
 
