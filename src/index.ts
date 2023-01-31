@@ -141,10 +141,7 @@ app.get('/:image/:variant?', (ctx) => {
 					return nres;
 				});
 		})
-		.catch((err) => {
-			ctx.status(500);
-			return ctx.text(err.message);
-		});
+		.catch((err) => ctx.text(err.message, err.message.includes('not found') ? 404 : 500));
 });
 
 app.get('/*', (ctx) => (ctx.env.ASSETS as Fetcher).fetch(ctx.req));
