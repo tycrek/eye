@@ -169,39 +169,37 @@ app.get('/expire-cache', (ctx) =>
 //#endregion
 
 // Lookup name -> id and vice versa
-app.get('/lookup/:needle', (ctx) => getImage(ctx, ctx.req.param().needle)
-	.then((image) => ctx.json(image))
-	.catch((err) => http404(ctx, err)));
+app.get('/lookup/:needle', (ctx) =>
+	getImage(ctx, ctx.req.param().needle)
+		.then((image) => ctx.json(image))
+		.catch((err) => http404(ctx, err)));
 
 // Image relay
-app.get('/:image/:variant?', (ctx) => {
-	let { image: imageName, variant: variantName } = ctx.req.param();
-
-	return getImage(ctx, imageName)
+app.get('/:image/:variant?', (ctx) =>
+	getImage(ctx, ctx.req.param().image)
 		.then((image) => {
 
 			// Default to public variant
-			const variantNeedle = variantName ?? 'public';
+			const variantNeedle = ctx.req.param().variant ?? 'public';
 
 			// Find variant
 			const variantUrl = image.variants.find((v) => v.endsWith(variantNeedle));
 			if (!variantUrl) throw new Error(`Variant not found: ${variantNeedle}`);
 
 			// Fetch variant
-			return fetch(variantUrl)
-				.then((res) => {
-
-					// Clone the response so that it's no longer immutable
-					const nres = new Response(res.body, res);
-
-					// Add header so the response includes the original filename
-					nres.headers.append('Content-Disposition', `inline; filename="${image.filename}"`);
-
-					return nres;
-				});
+			return Promise.all([fetch(variantUrl), image]);
 		})
-		.catch((err) => http404(ctx, err));
-});
+		.then(([variantResponse, image]) => {
+
+			// Clone the response so that it's no longer immutable
+			const nres = new Response(variantResponse.body, variantResponse);
+
+			// Add header so the response includes the original filename
+			nres.headers.append('Content-Disposition', `inline; filename="${image.filename}"`);
+
+			return nres;
+		})
+		.catch((err) => http404(ctx, err)));
 
 app.get('/*', (ctx) => (ctx.env.ASSETS as Fetcher).fetch(ctx.req));
 
