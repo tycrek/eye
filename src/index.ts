@@ -46,7 +46,7 @@ const EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
 /**
  * Strip file extension from filename only if it's an image
  */
-const stripExtensionIfImage = (filename: string) => EXTENSIONS.includes(filename.split('.').slice(-1)[0]) ? stripExtension(filename) : filename;
+const stripExtensionIfImage = (filename: string) => EXTENSIONS.includes(filename.toLowerCase().split('.').slice(-1)[0]) ? stripExtension(filename) : filename;
 
 /**
  * KV error handler
