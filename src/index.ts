@@ -55,7 +55,7 @@ const KV = (ctx: Context) => (ctx.env.eye as KVNamespace);
 /**
  * Check if kache is expired
  */
-const isExpred = (ctx: Context) => new Promise((resolve, reject) =>
+const isExpired = (ctx: Context) => new Promise((resolve, reject) =>
 	KV(ctx).get('KV_LAST_CACHED')
 		.then((lastCached) => {
 			const expired1hour: boolean = !lastCached || new Date(lastCached).getTime() < new Date().getTime() - 1000 * 60 * 60;
@@ -100,7 +100,7 @@ app.get('/expire-cache', (ctx) =>
 app.get('/lookup/:needle', (ctx) => {
 	const { needle } = ctx.req.param();
 
-	return isExpred(ctx)
+	return isExpired(ctx)
 		.then(async (expired) => (!expired) ? JSON.parse(await KV(ctx).get('KV_IMAGES')) : fetchImages(ctx))
 		.then((images) => {
 			const image: Image = images.find((img) => img.filename === needle || img.id === needle);
@@ -114,22 +114,20 @@ app.get('/lookup/:needle', (ctx) => {
 app.get('/:image/:variant?', (ctx) => {
 	let { image: imageName, variant: variantName } = ctx.req.param();
 
-	return isExpred(ctx)
+	return isExpired(ctx)
 		.then(async (expired) => (!expired) ? JSON.parse(await KV(ctx).get('KV_IMAGES')) : fetchImages(ctx))
 		.then((images) => {
-			// May as well strip the extension if it's there
-			imageName = stripExt(imageName);
 
 			// Find image
-			const image: Image = images.find((img) => stripExt(img.filename) === imageName || img.id === imageName);
+			const image: Image = findImage(images, stripExt(imageName));
 			if (!image) throw new Error(`Image not found: ${imageName}`);
 
 			// Default to public variant
-			if (!variantName) variantName = 'public';
+			const variantNeedle = variantName ?? 'public';
 
 			// Find variant
-			const variantUrl = image.variants.find((v) => v.endsWith(variantName));
-			if (!variantUrl) throw new Error(`Variant not found: ${variantName}`);
+			const variantUrl = image.variants.find((v) => v.endsWith(variantNeedle));
+			if (!variantUrl) throw new Error(`Variant not found: ${variantNeedle}`);
 
 			// Fetch variant
 			return fetch(variantUrl)
