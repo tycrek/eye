@@ -7,9 +7,24 @@ import { bearerAuth } from 'hono/bearer-auth';
 const app = new Hono();
 
 /**
+ * Batch size for fetching images from Cloudflare API (supports fetching 100 images at a time)
+ */
+const BATCH_SIZE = 100;
+
+/**
  * Cloudflare Images API endpoint
  */
-const CF_IMAGES_API = 'https://api.cloudflare.com/client/v4/accounts/{account_identifier}/images/v1';
+const CF_IMAGES_API = (accountId: string, page: number) => `https://api.cloudflare.com/client/v4/accounts/${accountId}/images/v1?page=${page}&per_page=${BATCH_SIZE}`;
+
+/**
+ * Cloudflare API headers
+ */
+const HEADERS = (apiKey: string) => ({
+	headers: {
+		'Authorization': `Bearer ${apiKey}`,
+		'Content-Type': 'application/json'
+	}
+});
 
 /**
  * Represents a Cloudflare Image
@@ -34,93 +49,134 @@ interface ImageApiResult {
 /**
  * Bytes to MiB (mebibytes) converter
  * Cloudflare Workers KV values are limited to 25 MiB
+ * @unused
  */
 const bytesToMiB = (bytes: number) => (bytes / 1024 / 1024).toFixed(2);
 
 /**
+ * Attempts to find an image based on the name or ID provided
+ */
+const findImage = (needle: string, haystack: Image[]): Image | undefined => haystack.find((img) => img.filename.startsWith(needle) || img.id === needle);
+
+/**
  * Strip file extension from filename
  */
-const stripExt = (filename: string) => filename.replace(/\.[A-z]+$/gim, '');
+const stripExt = (filename: string) => filename.replace(/\.[A-z]+$/g, '');
+
+/**
+ * 404 handler
+ */
+const http404 = (ctx: Context, err: any) => ctx.text(err.message, err.message.includes('not found') ? 404 : 500);
 
 /**
  * KV error handler
  */
-const kvErr = (err: any, ctx: Context) => (ctx.status(400), ctx.json({ error: err.message }));
+const kvErr = (ctx: Context, err: any) => ctx.json({ error: err.message }, 500);
 
 /**
- * KV namespace
+ * Get the KV namespace binding
  */
 const KV = (ctx: Context) => (ctx.env.eye as KVNamespace);
 
 /**
- * Check if kache is expired
+ * Check if image cache on KV is expired
  */
 const isExpired = (ctx: Context) => new Promise((resolve, reject) =>
 	KV(ctx).get('KV_LAST_CACHED')
 		.then((lastCached) => {
+
+			// Expirations: 1 hour; 30 seconds (for dev)
 			const expired1hour: boolean = !lastCached || new Date(lastCached).getTime() < new Date().getTime() - 1000 * 60 * 60;
 			const expired30Seconds: boolean = !lastCached || new Date(lastCached).getTime() < new Date().getTime() - 1000 * 30;
 
 			const dev = false;
 			resolve(dev ? expired30Seconds : expired1hour);
 		})
-		.catch((err) => reject(err)));
+		.catch(reject));
 
 /**
- * Fetch images from Cloudflare API
+ * Fetch images from Cloudflare API, using pagination if needed
  */
-const fetchImages = (ctx: Context) => new Promise((resolve, reject) =>
-	fetch(CF_IMAGES_API.replace('{account_identifier}', ctx.env.ACCOUNT_ID), { headers: { 'Authorization': `Bearer ${ctx.env.API_KEY}` } })
-		.then((res) => res.json())
-		.then((json: ImageApiResult) => {
-			resolve(json.result.images);
+const fetchImages = (ctx: Context) => new Promise((resolve, reject) => {
+
+	// Array to store all images
+	const images: Image[] = [];
+
+	/**
+	 * Fetches the first page and any subsequent pages recursively
+	 */
+	const fetchAll = (page: number): Promise<Image[]> =>
+		fetch(CF_IMAGES_API(ctx.env.ACCOUNT_ID, page), HEADERS(ctx.env.API_KEY))
+			.then((res) => res.json())
+			.then((json: ImageApiResult) => {
+
+				// Add this batches images to the full set
+				images.push(...json.result.images);
+
+				// Fetch the next batch, if needed
+				return (json.result.images.length === BATCH_SIZE)
+					? fetchAll(page + 1)
+					: images;
+			});
+
+	// Start fetching!
+	console.log('Fetching images from Cloudflare API...');
+	fetchAll(1)
+		.then((images) => {
+
+			// Resolve before caching to improve response time for end-user
+			resolve(images);
+			console.log(`Fetched images from Cloudflare API: ${images.length} images`);
+
+			// Cache the response
+			const fetchDate = new Date().toISOString();
 			return Promise.all([
-				KV(ctx).put('KV_IMAGES', JSON.stringify(json.result.images)),
-				KV(ctx).put('KV_LAST_CACHED', new Date().toISOString()),
+				KV(ctx).put('KV_IMAGES', JSON.stringify(images)),
+				KV(ctx).put('KV_LAST_CACHED', fetchDate), fetchDate
 			]);
 		})
-		.then(([,]) => console.log('KV cache updated'))
-		.catch((err) => reject(err)));
+		.then(([, , fetchDate]) => console.log(`Images cached on KV: ${fetchDate}`))
+		.catch(reject);
+});
 
+/**
+ * Get an image from KV or Cloudflare API, depending on cache expiration status
+ */
+const getImage = (ctx: Context, needle: string) => isExpired(ctx)
+	.then(async (expired) => (!expired) ? JSON.parse(await KV(ctx).get('KV_IMAGES')) : fetchImages(ctx))
+	.then((images) => findImage(stripExt(needle), images))
+	.then((image) => {
+		if (!image) throw new Error(`Image not found: ${needle}`);
+		return image;
+	});
+
+//#region KV routes
 // KV routes
 app
 	// Bearer auth for KV
 	.use('/api/kv/*', (ctx, next) => bearerAuth({ token: ctx.env.TOKEN })(ctx, next))
 
 	// Get/Set KV value
-	.get('/api/kv/:key', (ctx) => KV(ctx).get(ctx.req.param().key).then((value) => ctx.text(value)).catch((err) => kvErr(err, ctx)))
-	.post('/api/kv/:key/:value', (ctx) => KV(ctx).put(ctx.req.param().key, ctx.req.param().value).catch((err) => kvErr(err, ctx)));
+	.get('/api/kv/:key', (ctx) => KV(ctx).get(ctx.req.param().key).then((value) => ctx.text(value)).catch((err) => kvErr(ctx, err)))
+	.post('/api/kv/:key/:value', (ctx) => KV(ctx).put(ctx.req.param().key, ctx.req.param().value).catch((err) => kvErr(ctx, err)));
 
 // Expire cache manually
 app.get('/expire-cache', (ctx) =>
 	Promise.all([KV(ctx).delete('KV_LAST_CACHED'), KV(ctx).delete('KV_IMAGES'), 'Cache expired'])
 		.then(([, , msg]) => (console.log(msg), ctx.text(msg))));
+//#endregion
 
 // Lookup name -> id and vice versa
-app.get('/lookup/:needle', (ctx) => {
-	const { needle } = ctx.req.param();
-
-	return isExpired(ctx)
-		.then(async (expired) => (!expired) ? JSON.parse(await KV(ctx).get('KV_IMAGES')) : fetchImages(ctx))
-		.then((images) => {
-			const image: Image = images.find((img) => img.filename === needle || img.id === needle);
-			if (!image) throw new Error(`Image not found: ${needle}`);
-
-			return ctx.json(image);
-		});
-});
+app.get('/lookup/:needle', (ctx) => getImage(ctx, ctx.req.param().needle)
+	.then((image) => ctx.json(image))
+	.catch((err) => http404(ctx, err)));
 
 // Image relay
 app.get('/:image/:variant?', (ctx) => {
 	let { image: imageName, variant: variantName } = ctx.req.param();
 
-	return isExpired(ctx)
-		.then(async (expired) => (!expired) ? JSON.parse(await KV(ctx).get('KV_IMAGES')) : fetchImages(ctx))
-		.then((images) => {
-
-			// Find image
-			const image: Image = findImage(images, stripExt(imageName));
-			if (!image) throw new Error(`Image not found: ${imageName}`);
+	return getImage(ctx, imageName)
+		.then((image) => {
 
 			// Default to public variant
 			const variantNeedle = variantName ?? 'public';
@@ -131,15 +187,18 @@ app.get('/:image/:variant?', (ctx) => {
 
 			// Fetch variant
 			return fetch(variantUrl)
-				// Modify headers to attach original filename
 				.then((res) => {
+
 					// Clone the response so that it's no longer immutable
 					const nres = new Response(res.body, res);
+
+					// Add header so the response includes the original filename
 					nres.headers.append('Content-Disposition', `inline; filename="${image.filename}"`);
+
 					return nres;
 				});
 		})
-		.catch((err) => ctx.text(err.message, err.message.includes('not found') ? 404 : 500));
+		.catch((err) => http404(ctx, err));
 });
 
 app.get('/*', (ctx) => (ctx.env.ASSETS as Fetcher).fetch(ctx.req));
