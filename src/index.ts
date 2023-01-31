@@ -40,13 +40,7 @@ const bytesToMiB = (bytes: number) => (bytes / 1024 / 1024).toFixed(2);
 /**
  * Strip file extension from filename
  */
-const stripExtension = (filename: string) => filename.split('.').slice(0, -1).join('.');
-
-const EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
-/**
- * Strip file extension from filename only if it's an image
- */
-const stripExtensionIfImage = (filename: string) => EXTENSIONS.includes(filename.toLowerCase().split('.').slice(-1)[0]) ? stripExtension(filename) : filename;
+const stripExt = (filename: string) => filename.replace(/\.[A-z]+$/gim, '');
 
 /**
  * KV error handler
@@ -123,8 +117,11 @@ app.get('/:image/:variant?', (ctx) => {
 	return isExpred(ctx)
 		.then(async (expired) => (!expired) ? JSON.parse(await KV(ctx).get('KV_IMAGES')) : fetchImages(ctx))
 		.then((images) => {
+			// May as well strip the extension if it's there
+			imageName = stripExt(imageName);
+
 			// Find image
-			const image: Image = images.find((img) => img.filename === imageName || img.id === imageName || stripExtensionIfImage(img.filename) === stripExtensionIfImage(imageName));
+			const image: Image = images.find((img) => stripExt(img.filename) === imageName || img.id === imageName);
 			if (!image) throw new Error(`Image not found: ${imageName}`);
 
 			// Default to public variant
