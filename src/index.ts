@@ -187,15 +187,19 @@ app.get('/:image/:variant?', (ctx) =>
 			if (!variantUrl) throw new Error(`Variant not found: ${variantNeedle}`);
 
 			// Fetch variant
-			return Promise.all([fetch(variantUrl), image]);
+			return Promise.all([fetch(variantUrl), image, variantUrl]);
 		})
-		.then(([variantResponse, image]) => {
+		.then(([variantResponse, image, variantUrl]) => {
 
 			// Clone the response so that it's no longer immutable
 			const nres = new Response(variantResponse.body, variantResponse);
 
 			// Add header so the response includes the original filename
 			nres.headers.append('Content-Disposition', `inline; filename="${image.filename}"`);
+
+			// Add headers including the original image URL and UUID
+			nres.headers.append('X-Original-Url', variantUrl);
+			nres.headers.append('X-Image-Id', image.id);
 
 			return nres;
 		})
