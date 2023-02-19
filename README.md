@@ -54,5 +54,5 @@ The `image` parameter can be either the filename or UUID of the image. File exte
 ## Stack
 
 - [Cloudflare Workers](https://developers.cloudflare.com/workers/) - serverless hosting
-- [Hono.js](https://honojs.dev/) - backend
+- [Hono.js](https://hono.dev/) - backend
 - [Pagery](https://github.com/tycrek/pagery) - frontend (landing page)
