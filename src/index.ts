@@ -2,9 +2,17 @@ import { Hono, Context } from 'hono';
 import { bearerAuth } from 'hono/bearer-auth';
 
 /**
+ * Bindings introduced for Hono v3.0.0
+ */
+type Bindings = {
+	TOKEN: string;
+	ASSETS: Fetcher;
+}
+
+/**
  * Create a new Hono app
  */
-const app = new Hono();
+const app = new Hono<{ Bindings: Bindings }>();
 
 /**
  * Batch size for fetching images from Cloudflare API (supports fetching 100 images at a time)
@@ -205,6 +213,6 @@ app.get('/:image/:variant?', (ctx) =>
 		})
 		.catch((err) => http404(ctx, err)));
 
-app.get('/*', (ctx) => (ctx.env.ASSETS as Fetcher).fetch(ctx.req));
+app.get('/*', (ctx) => (ctx.env.ASSETS).fetch(ctx.req.raw));
 
 export default app;
