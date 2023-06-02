@@ -7,6 +7,7 @@ import { bearerAuth } from 'hono/bearer-auth';
 type Bindings = {
 	TOKEN: string;
 	ASSETS: Fetcher;
+	eye: KVNamespace;
 }
 
 /**
@@ -82,15 +83,10 @@ const http404 = (ctx: Context, err: any) => ctx.text(err.message, err.message.in
 const kvErr = (ctx: Context, err: any) => ctx.json({ error: err.message }, 500);
 
 /**
- * Get the KV namespace binding
- */
-const KV = (ctx: Context) => (ctx.env.eye as KVNamespace);
-
-/**
  * Check if image cache on KV is expired
  */
 const isExpired = (ctx: Context) => new Promise((resolve, reject) =>
-	KV(ctx).get('KV_LAST_CACHED')
+	ctx.env.eye.get('KV_LAST_CACHED')
 		.then((lastCached) => {
 
 			// Expirations: 1 hour; 30 seconds (for dev)
@@ -141,8 +137,8 @@ const fetchImages = (ctx: Context) => new Promise((resolve, reject) => {
 			// Cache the response
 			const fetchDate = new Date().toISOString();
 			return Promise.all([
-				KV(ctx).put('KV_IMAGES', JSON.stringify(images)),
-				KV(ctx).put('KV_LAST_CACHED', fetchDate), fetchDate
+				ctx.env.eye.put('KV_IMAGES', JSON.stringify(images)),
+				ctx.env.eye.put('KV_LAST_CACHED', fetchDate), fetchDate
 			]);
 		})
 		.then(([, , fetchDate]) => console.log(`Images cached on KV: ${fetchDate}`))
@@ -153,7 +149,7 @@ const fetchImages = (ctx: Context) => new Promise((resolve, reject) => {
  * Get an image from KV or Cloudflare API, depending on cache expiration status
  */
 const getImage = (ctx: Context, needle: string) => isExpired(ctx)
-	.then(async (expired) => (!expired) ? JSON.parse(await KV(ctx).get('KV_IMAGES')) : fetchImages(ctx))
+	.then(async (expired) => (!expired) ? JSON.parse(await ctx.env.eye.get('KV_IMAGES')) : fetchImages(ctx))
 	.then((images) => findImage(stripExt(needle), images))
 	.then((image) => {
 		if (!image) throw new Error(`Image not found: ${needle}`);
@@ -167,12 +163,12 @@ app
 	.use('/api/kv/*', (ctx, next) => bearerAuth({ token: ctx.env.TOKEN })(ctx, next))
 
 	// Get/Set KV value
-	.get('/api/kv/:key', (ctx) => KV(ctx).get(ctx.req.param().key).then((value) => ctx.text(value)).catch((err) => kvErr(ctx, err)))
-	.post('/api/kv/:key/:value', (ctx) => KV(ctx).put(ctx.req.param().key, ctx.req.param().value).catch((err) => kvErr(ctx, err)));
+	.get('/api/kv/:key', (ctx) => ctx.env.eye.get(ctx.req.param().key).then((value) => ctx.text(value)).catch((err) => kvErr(ctx, err)))
+	.post('/api/kv/:key/:value', (ctx) => ctx.env.eye.put(ctx.req.param().key, ctx.req.param().value).catch((err) => kvErr(ctx, err)));
 
 // Expire cache manually
 app.get('/expire-cache', (ctx) =>
-	Promise.all([KV(ctx).delete('KV_LAST_CACHED'), KV(ctx).delete('KV_IMAGES'), 'Cache expired'])
+	Promise.all([ctx.env.eye.delete('KV_LAST_CACHED'), ctx.env.eye.delete('KV_IMAGES'), 'Cache expired'])
 		.then(([, , msg]) => (console.log(msg), ctx.text(msg))));
 //#endregion
 
