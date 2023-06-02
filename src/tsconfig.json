@@ -3,7 +3,8 @@
 		"target": "esnext",
 		"module": "esnext",
 		"lib": [
-			"esnext"
+			"esnext",
+			"DOM"
 		],
 		"types": [
 			"@cloudflare/workers-types"
