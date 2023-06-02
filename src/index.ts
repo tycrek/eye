@@ -4,9 +4,6 @@ import { Hono, Context } from 'hono';
  * Bindings introduced for Hono v3.0.0
  */
 type Bindings = {
-	ACCOUNT_ID: string;
-	API_KEY: string;
-
 	/**
 	 * Static asset fetcher for Pages
 	 */
@@ -115,16 +112,24 @@ const isExpired = (ctx: Context) => new Promise((resolve, reject) =>
 /**
  * Fetch images from Cloudflare API, using pagination if needed
  */
-const fetchImages = (ctx: Context) => new Promise((resolve, reject) => {
+const fetchImages = (ctx: Context) => new Promise(async (resolve, reject) => {
+
+	// Check if KV is ready
+	const kvReady = await isKvReady(ctx);
+	if (!kvReady) return reject('KV namespace not found');
 
 	// Array to store all images
 	const images: Image[] = [];
+
+	// Try and get the ACCOUNT_ID and API_KEY from KV
+	const accountId = await ctx.env.eye.get('ACCOUNT_ID');
+	const apiKey = await ctx.env.eye.get('API_KEY');
 
 	/**
 	 * Fetches the first page and any subsequent pages recursively
 	 */
 	const fetchAll = (page: number): Promise<Image[]> =>
-		fetch(CF_IMAGES_API(ctx.env.ACCOUNT_ID, page), HEADERS(ctx.env.API_KEY))
+		fetch(CF_IMAGES_API(accountId, page), HEADERS(apiKey))
 			.then((res) => res.json())
 			.then((json: ImageApiResult) => {
 
@@ -139,8 +144,7 @@ const fetchImages = (ctx: Context) => new Promise((resolve, reject) => {
 
 	// Start fetching!
 	console.log('Fetching images from Cloudflare API...');
-	isKvReady(ctx)
-		.then(() => fetchAll(1))
+	fetchAll(1)
 		.then((images) => {
 
 			// Resolve before caching to improve response time for end-user
@@ -171,6 +175,41 @@ const getImage = (ctx: Context, needle: string) =>
 			return image;
 		});
 
+/**
+ * Quick-method to fetch static assets
+ */
+const assets = (ctx: Context) => (ctx.env.ASSETS as Fetcher).fetch(ctx.req.raw);
+
+// Static asset routes(robots.txt, ui.js)
+app
+	.get('/robots.txt', assets)
+	.get('/ui.js', assets);
+
+// Setup flow
+app
+	.get('/setup', assets)
+	.post(async (ctx) => {
+
+		// Get the ACCOUNT_ID and API_KEY from the request body
+		const { ACCOUNT_ID, API_KEY } = await ctx.req.json();
+
+		// Check if we can fetch images
+		const res = await fetch(CF_IMAGES_API(ACCOUNT_ID, 1), HEADERS(API_KEY));
+		if (!res.ok) throw new Error('Invalid credentials');
+
+		// Check if KV is ready
+		const kvReady = await isKvReady(ctx);
+		if (!kvReady) throw new Error('KV not ready');
+
+		// Save credentials
+		await Promise.all([
+			ctx.env.eye.put('ACCOUNT_ID', ACCOUNT_ID),
+			ctx.env.eye.put('API_KEY', API_KEY)
+		]);
+
+		return ctx.text('Setup complete');
+	});
+
 // Expire cache manually
 app.get('/expire-cache', (ctx) =>
 	isKvReady(ctx)
@@ -182,6 +221,22 @@ app.get('/lookup/:needle', (ctx) =>
 	isKvReady(ctx)
 		.then(() => getImage(ctx, ctx.req.param().needle))
 		.then((image) => ctx.json(image)));
+
+// Index
+app.get('/', async (ctx) => {
+
+	// Check if KV is ready
+	const kvReady = await isKvReady(ctx);
+	if (!kvReady) return ctx.text('KV namespace not found, please bind a KV namespace with the name `eye`', 400);
+
+	// Check required variables in KV
+	const accountId = await ctx.env.eye.get('ACCOUNT_ID');
+	const apiKey = await ctx.env.eye.get('API_KEY');
+	if (!accountId || !apiKey) return ctx.text('Missing Cloudflare credentials, please run `/setup`', 400);
+
+	// Otherwise, get the index
+	return assets(ctx);
+});
 
 // Image relay
 app.get('/:image/:variant?', (ctx) =>
@@ -213,12 +268,6 @@ app.get('/:image/:variant?', (ctx) =>
 
 			return nres;
 		}));
-
-app.get('/*', (ctx) => {
-	// Check all env vars are set
-
-	return (ctx.env.ASSETS).fetch(ctx.req.raw);
-});
 
 app.onError((err, ctx) => ctx.text(err.message, err.message.includes('not found') ? 404 : 500));
 
