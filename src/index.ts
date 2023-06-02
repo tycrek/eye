@@ -65,7 +65,7 @@ const bytesToMiB = (bytes: number) => (bytes / 1024 / 1024).toFixed(2);
 /**
  * Attempts to find an image based on the name or ID provided
  */
-const findImage = (needle: string, haystack: Image[]): Image | undefined => haystack.find((img) => img.filename.startsWith(needle) || img.id === needle);
+const findImage = (needle: string, haystack: Image[]): Image | undefined => haystack.find((img) => img.filename.startsWith(needle) || img.id.startsWith(needle));
 
 /**
  * Strip file extension from filename
