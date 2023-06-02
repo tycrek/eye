@@ -1,6 +1,6 @@
 {
 	"name": "eye",
-	"version": "0.1.1",
+	"version": "0.2.0",
 	"author": "tycrek <t@tycrek.com> (https://tycrek.com)",
 	"scripts": {
 		"wrangler": "node ./node_modules/wrangler/bin/wrangler.js",
