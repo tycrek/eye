@@ -4,7 +4,9 @@
 	"author": "tycrek <t@tycrek.com> (https://tycrek.com)",
 	"scripts": {
 		"wrangler": "node ./node_modules/wrangler/bin/wrangler.js",
-		"build": "esbuild --bundle src/index.ts --format=esm --outfile=dist/_worker.js",
+		"build": "npm run build:app && npm run build:uijs",
+		"build:app": "esbuild --bundle src/index.ts --format=esm --outfile=dist/_worker.js",
+		"build:uijs": "esbuild --bundle src/frontend/ui.ts --format=esm --outfile=dist/ui.js",
 		"pagery": "node ./node_modules/pagery/dist/pagery.js --output=dist/",
 		"dev": "npm run build && npm run pagery && node ./node_modules/wrangler/bin/wrangler.js pages dev dist/ --kv eye",
 		"publish": "npm run build && node ./node_modules/wrangler/bin/wrangler.js pages publish dist/ --project-name=eye"
