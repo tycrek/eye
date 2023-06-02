@@ -158,13 +158,6 @@ const getImage = (ctx: Context, needle: string) => isExpired(ctx)
 
 //#region KV routes
 // KV routes
-app
-	// Bearer auth for KV
-	.use('/api/kv/*', (ctx, next) => bearerAuth({ token: ctx.env.TOKEN })(ctx, next))
-
-	// Get/Set KV value
-	.get('/api/kv/:key', (ctx) => ctx.env.eye.get(ctx.req.param().key).then((value) => ctx.text(value)).catch((err) => kvErr(ctx, err)))
-	.post('/api/kv/:key/:value', (ctx) => ctx.env.eye.put(ctx.req.param().key, ctx.req.param().value).catch((err) => kvErr(ctx, err)));
 
 // Expire cache manually
 app.get('/expire-cache', (ctx) =>
