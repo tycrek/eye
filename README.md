@@ -28,9 +28,7 @@ For local dev, put these variables in a file called `.dev.vars` (formatted the s
 
 For production, set these values on the dashboard.
 
-- **`TOKEN`** is used for requests to eye's KV API. Set to a random string.
 - **`ACCOUNT_ID`** can be found on the right-hand side of the Images dashboard, under **Developer Resources**.
-- **`ACCOUNT_HASH`** is located below the **Account ID** on the same page.
 - **`API_KEY`** must be created in the **[API Tokens](https://dash.cloudflare.com/profile/api-tokens)** page. Make sure you give your key access to `Account.Cloudflare Images`.
 
 ## Usage

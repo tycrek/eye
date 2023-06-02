@@ -4,8 +4,17 @@ import { Hono, Context } from 'hono';
  * Bindings introduced for Hono v3.0.0
  */
 type Bindings = {
-	TOKEN: string;
+	ACCOUNT_ID: string;
+	API_KEY: string;
+
+	/**
+	 * Static asset fetcher for Pages
+	 */
 	ASSETS: Fetcher;
+
+	/**
+	 * KV namespace for storing image information
+	 */
 	eye: KVNamespace;
 }
 
@@ -205,7 +214,11 @@ app.get('/:image/:variant?', (ctx) =>
 			return nres;
 		}));
 
-app.get('/*', (ctx) => (ctx.env.ASSETS).fetch(ctx.req.raw));
+app.get('/*', (ctx) => {
+	// Check all env vars are set
+
+	return (ctx.env.ASSETS).fetch(ctx.req.raw);
+});
 
 app.onError((err, ctx) => ctx.text(err.message, err.message.includes('not found') ? 404 : 500));
 
