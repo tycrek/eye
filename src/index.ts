@@ -1,5 +1,4 @@
 import { Hono, Context } from 'hono';
-import { bearerAuth } from 'hono/bearer-auth';
 
 /**
  * Bindings introduced for Hono v3.0.0
@@ -73,20 +72,24 @@ const findImage = (needle: string, haystack: Image[]): Image | undefined => hays
 const stripExt = (filename: string) => filename.replace(/\.[A-z]+$/g, '');
 
 /**
- * 404 handler
+ * Check if `eye` is available
  */
-const http404 = (ctx: Context, err: any) => ctx.text(err.message, err.message.includes('not found') ? 404 : 500);
-
-/**
- * KV error handler
- */
-const kvErr = (ctx: Context, err: any) => ctx.json({ error: err.message }, 500);
+const isKvReady = (ctx: Context): Promise<boolean> => new Promise((resolve, reject) => {
+	try {
+		const eye = ctx.env.eye as KVNamespace | undefined;
+		if (!eye) throw new Error('KV namespace not found');
+		resolve(true);
+	} catch (err) {
+		reject(err);
+	}
+});
 
 /**
  * Check if image cache on KV is expired
  */
 const isExpired = (ctx: Context) => new Promise((resolve, reject) =>
-	ctx.env.eye.get('KV_LAST_CACHED')
+	isKvReady(ctx)
+		.then(() => ctx.env.eye.get('KV_LAST_CACHED'))
 		.then((lastCached) => {
 
 			// Expirations: 1 hour; 30 seconds (for dev)
@@ -127,7 +130,8 @@ const fetchImages = (ctx: Context) => new Promise((resolve, reject) => {
 
 	// Start fetching!
 	console.log('Fetching images from Cloudflare API...');
-	fetchAll(1)
+	isKvReady(ctx)
+		.then(() => fetchAll(1))
 		.then((images) => {
 
 			// Resolve before caching to improve response time for end-user
@@ -148,32 +152,32 @@ const fetchImages = (ctx: Context) => new Promise((resolve, reject) => {
 /**
  * Get an image from KV or Cloudflare API, depending on cache expiration status
  */
-const getImage = (ctx: Context, needle: string) => isExpired(ctx)
-	.then(async (expired) => (!expired) ? JSON.parse(await ctx.env.eye.get('KV_IMAGES')) : fetchImages(ctx))
-	.then((images) => findImage(stripExt(needle), images))
-	.then((image) => {
-		if (!image) throw new Error(`Image not found: ${needle}`);
-		return image;
-	});
-
-//#region KV routes
-// KV routes
+const getImage = (ctx: Context, needle: string) =>
+	isKvReady(ctx)
+		.then(() => isExpired(ctx))
+		.then(async (expired) => (!expired) ? JSON.parse(await ctx.env.eye.get('KV_IMAGES')) : fetchImages(ctx))
+		.then((images) => findImage(stripExt(needle), images))
+		.then((image) => {
+			if (!image) throw new Error(`Image not found: ${needle}`);
+			return image;
+		});
 
 // Expire cache manually
 app.get('/expire-cache', (ctx) =>
-	Promise.all([ctx.env.eye.delete('KV_LAST_CACHED'), ctx.env.eye.delete('KV_IMAGES'), 'Cache expired'])
+	isKvReady(ctx)
+		.then(() => Promise.all([ctx.env.eye.delete('KV_LAST_CACHED'), ctx.env.eye.delete('KV_IMAGES'), 'Cache expired']))
 		.then(([, , msg]) => (console.log(msg), ctx.text(msg))));
-//#endregion
 
 // Lookup name -> id and vice versa
 app.get('/lookup/:needle', (ctx) =>
-	getImage(ctx, ctx.req.param().needle)
-		.then((image) => ctx.json(image))
-		.catch((err) => http404(ctx, err)));
+	isKvReady(ctx)
+		.then(() => getImage(ctx, ctx.req.param().needle))
+		.then((image) => ctx.json(image)));
 
 // Image relay
 app.get('/:image/:variant?', (ctx) =>
-	getImage(ctx, ctx.req.param().image)
+	isKvReady(ctx)
+		.then(() => getImage(ctx, ctx.req.param().image))
 		.then((image) => {
 
 			// Default to public variant
@@ -199,9 +203,10 @@ app.get('/:image/:variant?', (ctx) =>
 			nres.headers.append('X-Image-Id', image.id);
 
 			return nres;
-		})
-		.catch((err) => http404(ctx, err)));
+		}));
 
 app.get('/*', (ctx) => (ctx.env.ASSETS).fetch(ctx.req.raw));
+
+app.onError((err, ctx) => ctx.text(err.message, err.message.includes('not found') ? 404 : 500));
 
 export default app;
