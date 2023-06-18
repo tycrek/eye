@@ -43,7 +43,7 @@ To **publish**, run `npm run publish`. This will build the project and publish i
 
 ## API
 
-### `GET /lookup/:needle`
+### `GET /.lookup/:needle`
 
 Returns the JSON info of the filename or ID provided.
 
@@ -53,14 +53,24 @@ Returns the image for the given image name and variant. If no variant is provide
 
 The `image` parameter can be either the filename or UUID of the image. File extensions are optional.
 
-### `GET /expire-cache`
+### `GET /.expire-cache`
 
 Expires the image cache manually. This is done automatically every 24 hours, but can be done manually if needed.
 
-You may want to do this if you have updated an image and want to see the changes immediately. **It is recommended you visit one of your images after expiring the cache to ensure your visitors aren't served stale images.**
+You may want to do this if you have updated an image and want to see the changes immediately. It is recommended to use the next route after this one.
+
+### `GET /.update-cache`
+
+Updates the image cache manually. This is done automatically every 24 hours, but can be done manually if needed.
+
+You will have to expire the cache first, if it is not already expired.
+
+#### Why dots in the routes?
+
+This helps avoid issues with files that match these route names. Though this is unlikely, it is still possible.
 
 ## Stack
 
 - [Cloudflare Workers](https://developers.cloudflare.com/workers/) - serverless hosting
 - [Hono.js](https://hono.dev/) - backend
-- [Pagery](https://github.com/tycrek/pagery) - frontend (landing page)
+- [Pagery](https://github.com/tycrek/pagery) - frontend (landing & setup page)
