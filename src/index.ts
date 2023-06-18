@@ -211,13 +211,30 @@ app
 	});
 
 // Expire cache manually
-app.get('/expire-cache', (ctx) =>
+app.get('/.expire-cache', (ctx) =>
 	isKvReady(ctx)
-		.then(() => Promise.all([ctx.env.eye.delete('KV_LAST_CACHED'), ctx.env.eye.delete('KV_IMAGES'), 'Cache expired']))
-		.then(([, , msg]) => (console.log(msg), ctx.text(msg))));
+		.then(() => Promise.all([ctx.env.eye.delete('KV_LAST_CACHED'), 'Cache expired']))
+		.then(([, msg]) => (console.log(msg), ctx.text(msg))));
+
+app.get('/.update-cache', async (ctx) => {
+
+	// Check if KV is ready
+	const kvReady = await isKvReady(ctx);
+	if (!kvReady) return ctx.text('KV namespace not found, please bind a KV namespace with the name `eye`', 400);
+
+	// Check if the cache is expired
+	const expired = await isExpired(ctx);
+	if (!expired) return ctx.text('Cache not expired');
+
+	// Fetch images
+	await fetchImages(ctx);
+
+	// Return a message
+	return ctx.text('Cache updated');
+});
 
 // Lookup name -> id and vice versa
-app.get('/lookup/:needle', (ctx) =>
+app.get('/.lookup/:needle', (ctx) =>
 	isKvReady(ctx)
 		.then(() => getImage(ctx, ctx.req.param().needle))
 		.then((image) => ctx.json(image)));
