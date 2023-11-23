@@ -13,6 +13,11 @@ type Bindings = {
 	 * KV namespace for storing image information
 	 */
 	eye: KVNamespace;
+
+	/**
+	 * KV namespace for statistics
+	 */
+	eyeball: KVNamespace;
 }
 
 /**
@@ -80,10 +85,10 @@ const stripExt = (filename: string) => filename.replace(/\.[A-z]+$/g, '');
 /**
  * Check if `eye` is available
  */
-const isKvReady = (ctx: Context): Promise<boolean> => new Promise((resolve, reject) => {
+const isKvReady = (ctx: Context, kvname = 'eye'): Promise<boolean> => new Promise((resolve, reject) => {
 	try {
-		const eye = ctx.env.eye as KVNamespace | undefined;
-		if (!eye) throw new Error('KV namespace not found');
+		const eye = ctx.env[kvname] as KVNamespace | undefined;
+		if (!eye) throw new Error(`KV namespace ${kvname} not found`);
 		resolve(true);
 	} catch (err) {
 		reject(err);
@@ -174,6 +179,15 @@ const getImage = (ctx: Context, needle: string) =>
 			if (!image) throw new Error(`Image not found: ${needle}`);
 			return image;
 		});
+
+/**
+ * Update eyeball stats
+ */
+const eyeball = (ctx: Context, filename: string) =>
+	isKvReady(ctx, 'eyeball')
+		.then(() => ctx.env.eyeball.get(filename))
+		.then((count) => ctx.env.eyeball.put(filename, (count == null ? 1 : parseInt(count) + 1).toString()))
+		.catch((err) => !err.message.contains('KV namespace') ? console.warn(err) : {});
 
 /**
  * Quick-method to fetch static assets
@@ -269,7 +283,7 @@ app.get('/:image/:variant?', (ctx) =>
 			if (!variantUrl) throw new Error(`Variant not found: ${variantNeedle}`);
 
 			// Fetch variant
-			return Promise.all([fetch(variantUrl), image, variantUrl]);
+			return Promise.all([fetch(variantUrl), image, variantUrl, eyeball(ctx, image.filename)]);
 		})
 		.then(([variantResponse, image, variantUrl]) => {
 
