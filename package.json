@@ -1,6 +1,6 @@
 {
 	"name": "eye",
-	"version": "0.3.0",
+	"version": "0.3.1",
 	"author": "tycrek <t@tycrek.com> (https://tycrek.com)",
 	"scripts": {
 		"build": "npm run build:app && npm run build:uijs",
