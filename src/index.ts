@@ -293,6 +293,9 @@ app.get('/:image/:variant?', (ctx) =>
 			// Add header so the response includes the original filename
 			nres.headers.append('Content-Disposition', `inline; filename="${image.filename}"`);
 
+			// Add header for cache (90 days)
+			nres.headers.append('Cache-Control', 'public, max-age=7776000');
+
 			// Add headers including the original image URL and UUID
 			nres.headers.append('X-Original-Url', variantUrl);
 			nres.headers.append('X-Image-Id', image.id);
