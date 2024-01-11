@@ -11,15 +11,16 @@
 		"publish": "npm run build && npx wrangler pages deploy dist/ --project-name=eye"
 	},
 	"devDependencies": {
-		"@cloudflare/workers-types": "^4.20231025.0",
+		"@cloudflare/workers-types": "^4.20231218.0",
 		"@shoelace-style/shoelace": "^2.11.0",
-		"esbuild": "^0.19.5",
+		"esbuild": "^0.19.11",
+		"node-fetch": "^3.3.2",
 		"pagery": "^0.6.5",
 		"shoelace-fontawesome-pug": "^6.4.3",
 		"shoelace-pug-loader": "^2.11.0",
-		"typescript": "^5.2.2"
+		"typescript": "^5.3.3"
 	},
 	"dependencies": {
-		"hono": "^3.7.2"
+		"hono": "^3.12.2"
 	}
 }
