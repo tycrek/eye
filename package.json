@@ -7,7 +7,7 @@
 		"build:app": "esbuild --bundle src/index.ts --format=esm --outfile=dist/_worker.js",
 		"build:uijs": "esbuild --bundle src/frontend/ui.ts --format=esm --outfile=dist/ui.js",
 		"pagery": "node ./node_modules/pagery/dist/pagery.js --output=dist/ --outputCss=false",
-		"dev": "npm run build && npm run pagery && npx wrangler pages dev dist/ --kv eye --kv eyeball",
+		"dev": "npm run build && npm run pagery && npx wrangler pages dev dist/ --kv eye",
 		"publish": "npm run build && npx wrangler pages deploy dist/ --project-name=eye"
 	},
 	"devDependencies": {

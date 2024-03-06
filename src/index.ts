@@ -13,11 +13,6 @@ type Bindings = {
 	 * KV namespace for storing image information
 	 */
 	eye: KVNamespace;
-
-	/**
-	 * KV namespace for statistics
-	 */
-	eyeball: KVNamespace;
 }
 
 /**
@@ -181,15 +176,6 @@ const getImage = (ctx: Context, needle: string) =>
 		});
 
 /**
- * Update eyeball stats
- */
-const eyeball = (ctx: Context, filename: string) =>
-	isKvReady(ctx, 'eyeball')
-		.then(() => ctx.env.eyeball.get(filename))
-		.then((count) => ctx.env.eyeball.put(filename, (count == null ? 1 : parseInt(count) + 1).toString()))
-		.catch((err) => !err.message.contains('KV namespace') ? console.warn(err) : {});
-
-/**
  * Quick-method to fetch static assets
  */
 const assets = (ctx: Context) => (ctx.env.ASSETS as Fetcher).fetch(ctx.req.raw);
@@ -283,7 +269,7 @@ app.get('/:image/:variant?', (ctx) =>
 			if (!variantUrl) throw new Error(`Variant not found: ${variantNeedle}`);
 
 			// Fetch variant
-			return Promise.all([fetch(variantUrl), image, variantUrl, eyeball(ctx, image.filename)]);
+			return Promise.all([fetch(variantUrl), image, variantUrl]);
 		})
 		.then(([variantResponse, image, variantUrl]) => {
 
